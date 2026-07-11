@@ -1,0 +1,41 @@
+name: Sync fork with upstream
+
+on:
+  schedule:
+    # Daily at 04:00 UTC
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.repository == 'Fabio72/ZTE-MC-Home-assistant-repo'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Merge upstream main
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/Kajkac/ZTE-MC-Home-assistant-repo.git
+          git fetch upstream main
+
+          if git merge-base --is-ancestor upstream/main HEAD && \
+             [ "$(git rev-parse upstream/main)" = "$(git rev-parse HEAD)" ]; then
+            echo "Fork main is already aligned with upstream/main."
+            exit 0
+          fi
+
+          git merge upstream/main --no-edit
+          git push origin main
