@@ -85,6 +85,32 @@
                     "description": "Diccionario JSON opcional que se pasa como parA?metros."
                 }
             }
+        },
+        "send_custom_sms": {
+            "name": "Enviar SMS personalizado",
+            "description": "Envía un SMS con número y texto arbitrarios a través de un router configurado.",
+            "fields": {
+                "entry_id": {
+                    "name": "ID de entrada",
+                    "description": "ID de configuración cuando hay varios routers."
+                },
+                "phone_number": {
+                    "name": "Número de teléfono",
+                    "description": "Número de destino. Si se omite, se usa el configurado en la instalación."
+                },
+                "phone": {
+                    "name": "Teléfono (alias)",
+                    "description": "Alias de phone_number."
+                },
+                "target": {
+                    "name": "Destino",
+                    "description": "Número de destino o lista de números (se usa el primero)."
+                },
+                "message": {
+                    "name": "Mensaje",
+                    "description": "Texto del SMS a enviar."
+                }
+            }
         }
     }
 }

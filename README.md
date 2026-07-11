@@ -27,7 +27,7 @@ A custom Home Assistant integration for ZTE 5G routers/CPEs — MC-series and G5
 - 📶 Signal, connectivity, and diagnostic sensors — auto-discovered per model
 - 📱 Wi-Fi and LAN client tracking (device tracker)
 - 📊 FLUX usage monitoring — TX/RX rates, data plan limits, usage alerts (newer firmware)
-- 💬 SMS inbox access, diagnostics, and sending (predefined or custom, via service)
+- 💬 SMS inbox access, diagnostics, and sending (predefined buttons or custom text via service/notify)
 - 🖱️ Buttons and switches for reboot, Wi-Fi toggle, SMS actions, and more
 - ⚙️ Guided config flow — pick your model, enter IP/password, done
 - 🧩 Works with or without a router username, depending on model
@@ -108,14 +108,36 @@ Found something broken in a beta? [Open an issue](https://github.com/Kajkac/ZTE-
 
 ## 🔧 Services
 
-### `zte_router.send_custom_sms`
+### SMS Gateway (notify)
 
-Send an SMS to any phone number with any message, independent of the phone numbers configured during setup — useful from your own automations/scripts.
+Each configured router exposes a **SMS Gateway** notify entity (look it up under **Settings → Entities** — its name ends with `SMS Gateway`). Use it from automations to send arbitrary SMS text, the same way you would use any other notify integration.
 
 | Field | Required | Description |
 | --- | :---: | --- |
 | `message` | ✅ | Text to send |
-| `phone_number` / `phone` | ✅ (one of) | Destination number |
+| `data.phone_number` / `data.phone` / `data.target` | — | Destination number. If omitted, the phone number from setup is used |
+| `title` | — | Optional prefix line prepended to the message |
+
+```yaml
+action: notify.send_message
+target:
+  entity_id: notify.sms_gateway
+data:
+  message: "Porta del garage aperta da 10 minuti"
+  data:
+    phone_number: "+393331234567"
+```
+
+On success the integration fires a `zte_router_sms_sent` event with `phone_number`, `message`, and `entry_id`.
+
+### `zte_router.send_custom_sms`
+
+Lower-level service with the same router API as the notify entity. Useful in scripts or when you prefer calling the domain service directly.
+
+| Field | Required | Description |
+| --- | :---: | --- |
+| `message` | ✅ | Text to send |
+| `phone_number` / `phone` / `target` | — | Destination number. If omitted, the phone number from setup is used |
 | `entry_id` | — | Only needed with multiple ZTE Router entries |
 
 ```yaml

@@ -1,0 +1,116 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Seleziona modello router",
+                "description": "Seleziona il modello del tuo router.",
+                "data": {
+                    "router_type": "Modello router",
+                    "has_username": "Richiede nome utente? (se sì, abilita)"
+                }
+            },
+            "config": {
+                "title": "Configura router ZTE",
+                "description": "Inserisci le informazioni necessarie per configurare l'integrazione ZTE Router.",
+                "data": {
+                    "router_ip": "IP router",
+                    "router_password": "Password router",
+                    "router_username": "Nome utente router (se applicabile)",
+                    "ping_interval": "Intervallo ping (secondi)",
+                    "sms_check_interval": "Intervallo controllo SMS (secondi)",
+                    "monthly_usage_threshold": "Soglia utilizzo mensile (GB)",
+                    "phone_number": "Numero di telefono",
+                    "sms_message": "Messaggio SMS",
+                    "phone_number_1": "Numero di telefono 1",
+                    "message_1": "Messaggio 1",
+                    "phone_number_2": "Numero di telefono 2",
+                    "message_2": "Messaggio 2",
+                    "create_automation_sms": "Crea automazione SMS",
+                    "create_automation_clean": "Crea automazione pulizia memoria SMS",
+                    "create_automation_reboot": "Crea automazione riavvio",
+                    "enable_flux_sensors": "Abilita sensori FLUX - solo nuove versioni FW MC88x",
+                    "allow_stale_data": "Consenti ultimi valori dei sensori (usa dati obsoleti se il router non è raggiungibile)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Connessione al router non riuscita. Controlla l'indirizzo IP e riprova."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Opzioni router ZTE",
+                "data": {
+                    "router_ip": "IP router",
+                    "router_password": "Password router",
+                    "router_username": "Nome utente router (se applicabile)",
+                    "ping_interval": "Intervallo ping (secondi)",
+                    "sms_check_interval": "Intervallo controllo SMS (secondi)",
+                    "monthly_usage_threshold": "Soglia utilizzo mensile (GB)",
+                    "phone_number": "Numero di telefono",
+                    "sms_message": "Messaggio SMS",
+                    "phone_number_1": "Numero di telefono 1",
+                    "message_1": "Messaggio 1",
+                    "phone_number_2": "Numero di telefono 2",
+                    "message_2": "Messaggio 2",
+                    "create_automation_sms": "Crea automazione SMS",
+                    "create_automation_clean": "Crea automazione pulizia memoria SMS",
+                    "create_automation_reboot": "Crea automazione riavvio",
+                    "enable_flux_sensors": "Abilita sensori FLUX - solo nuove versioni FW MC88x",
+                    "allow_stale_data": "Consenti ultimi valori dei sensori (usa dati obsoleti se il router non è raggiungibile)"
+                }
+            }
+        }
+    },
+    "services": {
+        "ubus_call": {
+            "name": "Chiama metodo ubus G5 Ultra",
+            "description": "Esegue un modulo/metodo ubus su un router G5 Ultra configurato.",
+            "fields": {
+                "entry_id": {
+                    "name": "ID configurazione",
+                    "description": "ID configurazione specifico quando sono presenti più router."
+                },
+                "module": {
+                    "name": "Modulo",
+                    "description": "Nome dell'oggetto ubus (modulo) da invocare."
+                },
+                "method": {
+                    "name": "Metodo",
+                    "description": "Metodo/funzione da chiamare all'interno del modulo."
+                },
+                "params": {
+                    "name": "Parametri",
+                    "description": "Dizionario JSON opzionale passato come parametri."
+                }
+            }
+        },
+        "send_custom_sms": {
+            "name": "Invia SMS personalizzato",
+            "description": "Invia un SMS con numero e testo arbitrari tramite un router configurato.",
+            "fields": {
+                "entry_id": {
+                    "name": "ID configurazione",
+                    "description": "ID configurazione specifico quando sono presenti più router."
+                },
+                "phone_number": {
+                    "name": "Numero di telefono",
+                    "description": "Numero di destinazione. Se omesso, viene usato quello configurato in fase di setup."
+                },
+                "phone": {
+                    "name": "Telefono (alias)",
+                    "description": "Alias per phone_number."
+                },
+                "target": {
+                    "name": "Destinatario",
+                    "description": "Numero di destinazione o elenco di numeri (viene usato il primo)."
+                },
+                "message": {
+                    "name": "Messaggio",
+                    "description": "Testo dell'SMS da inviare."
+                }
+            }
+        }
+    }
+}

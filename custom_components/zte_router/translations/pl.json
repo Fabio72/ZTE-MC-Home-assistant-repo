@@ -85,6 +85,32 @@
                     "description": "Opcjonalny sAownik JSON przekazywany jako parametry."
                 }
             }
+        },
+        "send_custom_sms": {
+            "name": "Wyślij niestandardowy SMS",
+            "description": "Wyślij SMS z dowolnym numerem i treścią przez skonfigurowany router.",
+            "fields": {
+                "entry_id": {
+                    "name": "ID wpisu",
+                    "description": "Identyfikator konfiguracji, gdy dodano więcej routerów."
+                },
+                "phone_number": {
+                    "name": "Numer telefonu",
+                    "description": "Numer docelowy. Jeśli pominięty, używany jest numer z konfiguracji."
+                },
+                "phone": {
+                    "name": "Telefon (alias)",
+                    "description": "Alias dla phone_number."
+                },
+                "target": {
+                    "name": "Cel",
+                    "description": "Numer docelowy lub lista numerów (używany jest pierwszy)."
+                },
+                "message": {
+                    "name": "Wiadomość",
+                    "description": "Treść SMS do wysłania."
+                }
+            }
         }
     }
 }
