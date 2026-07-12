@@ -12,7 +12,14 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v4"
-      - name: HACS validation
+      - name: HACS validation (fork)
+        if: github.repository != 'Kajkac/ZTE-MC-Home-assistant-repo'
+        uses: "hacs/action@main"
+        with:
+          category: "integration"
+          ignore: topics issues
+      - name: HACS validation (upstream)
+        if: github.repository == 'Kajkac/ZTE-MC-Home-assistant-repo'
         uses: "hacs/action@main"
         with:
           category: "integration"
