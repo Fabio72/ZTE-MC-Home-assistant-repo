@@ -85,6 +85,32 @@
                     "description": "Optional JSON dictionary passed as params."
                 }
             }
+        },
+        "send_custom_sms": {
+            "name": "Send custom SMS",
+            "description": "Send an SMS with an arbitrary phone number and message through a configured router entry.",
+            "fields": {
+                "entry_id": {
+                    "name": "Entry ID",
+                    "description": "Specific config entry ID when multiple routers are configured."
+                },
+                "phone_number": {
+                    "name": "Phone number",
+                    "description": "Destination phone number. If omitted, the phone number configured during setup is used."
+                },
+                "phone": {
+                    "name": "Phone (alias)",
+                    "description": "Alias for phone_number."
+                },
+                "target": {
+                    "name": "Target",
+                    "description": "Destination phone number or list of numbers (first entry is used)."
+                },
+                "message": {
+                    "name": "Message",
+                    "description": "SMS message text to send."
+                }
+            }
         }
     }
 }

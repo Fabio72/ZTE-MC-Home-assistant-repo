@@ -85,6 +85,32 @@
                     "description": "Optionales JSON-Objekt, das als Parameter übergeben wird."
                 }
             }
+        },
+        "send_custom_sms": {
+            "name": "Benutzerdefinierte SMS senden",
+            "description": "Sende eine SMS mit beliebiger Telefonnummer und Nachricht über einen konfigurierten Router.",
+            "fields": {
+                "entry_id": {
+                    "name": "Eintrags-ID",
+                    "description": "Spezifische Konfiguration-ID, wenn mehrere Router eingerichtet sind."
+                },
+                "phone_number": {
+                    "name": "Telefonnummer",
+                    "description": "Zielnummer. Wenn leer, wird die bei der Einrichtung hinterlegte Nummer verwendet."
+                },
+                "phone": {
+                    "name": "Telefon (Alias)",
+                    "description": "Alias für phone_number."
+                },
+                "target": {
+                    "name": "Ziel",
+                    "description": "Zielnummer oder Liste von Nummern (es wird die erste verwendet)."
+                },
+                "message": {
+                    "name": "Nachricht",
+                    "description": "SMS-Text zum Senden."
+                }
+            }
         }
     }
 }

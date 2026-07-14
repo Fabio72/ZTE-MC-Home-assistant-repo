@@ -46,7 +46,7 @@ send_custom_sms:
         text:
     phone_number:
       name: Phone number
-      description: Destination phone number.
+      description: Destination phone number. If omitted, the phone number configured during setup is used.
       example: "+15555550100"
       required: false
       selector:
@@ -58,6 +58,13 @@ send_custom_sms:
       required: false
       selector:
         text:
+    target:
+      name: Target
+      description: Destination phone number or list of numbers (first entry is used). Alias for phone_number.
+      example: "+15555550100"
+      required: false
+      selector:
+        object:
     message:
       name: Message
       description: SMS message text to send.

@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 
@@ -23,7 +22,13 @@ from .const import (
 )
 from .g5_ultra_client import G5UltraRouterRunner
 from .router_backend import run_router_commands
-from .coordinators import ZTERouterDataUpdateCoordinator, ZTERouterSMSUpdateCoordinator, extract_json
+from .coordinators import ZTERouterDataUpdateCoordinator, ZTERouterSMSUpdateCoordinator
+from .sms_gateway import (
+    EVENT_SMS_SENT,
+    async_send_custom_sms,
+    resolve_phone_number,
+    router_username_for_entry,
+)
 
 _LOGGER = logging.getLogger(__name__)
 SERVICE_UBUS_CALL = "ubus_call"
@@ -42,6 +47,7 @@ SERVICE_SEND_CUSTOM_SMS_SCHEMA = vol.Schema(
         vol.Optional("entry_id"): cv.string,
         vol.Optional("phone"): cv.string,
         vol.Optional("phone_number"): cv.string,
+        vol.Optional("target"): vol.Any(cv.string, [cv.string]),
         vol.Required("message"): cv.string,
     }
 )
@@ -210,7 +216,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     firmware_version = coordinator.data.get("wa_inner_version", "Unknown")
 
     # Forward entry setup to relevant platforms, including button
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "switch", "button", "device_tracker", "text"])
+    await hass.config_entries.async_forward_entry_setups(
+        entry, ["sensor", "switch", "button", "device_tracker", "text", "notify"]
+    )
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
@@ -257,10 +265,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             ],
             "action": [
                 {
-                    "service": "button.press",
-                    "target": {
-                        "entity_id": "button.send_sms_50gb"
-                    }
+                    "service": f"{DOMAIN}.send_custom_sms",
+                    "data": {
+                        "phone_number": phone_number,
+                        "message": sms_message,
+                    },
                 }
             ],
             "mode": "single"
@@ -372,6 +381,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     await hass.config_entries.async_forward_entry_unload(entry, "button")
     await hass.config_entries.async_forward_entry_unload(entry, "device_tracker")
     await hass.config_entries.async_forward_entry_unload(entry, "text")
+    await hass.config_entries.async_forward_entry_unload(entry, "notify")
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
 
@@ -444,46 +454,35 @@ def _ensure_services_registered(hass: HomeAssistant) -> None:
         entry = _resolve_config_entry(hass, call.data.get("entry_id"))
         merged = {**entry.data, **entry.options}
         router_type = merged.get("router_type", ROUTER_TYPE_MC801)
-        username = merged.get("router_username") if router_type in [ROUTER_TYPE_MC888, ROUTER_TYPE_MC889] else None
+        default_phone = merged.get("phone_number", "")
 
-        phone = (call.data.get("phone") or call.data.get("phone_number") or "").strip()
-        if not phone:
-            raise HomeAssistantError("send_custom_sms: provide 'phone' or 'phone_number'")
-        message = call.data["message"].strip()
-        if not message:
-            raise HomeAssistantError("send_custom_sms: 'message' cannot be empty")
+        phone = resolve_phone_number(
+            phone=call.data.get("phone"),
+            phone_number=call.data.get("phone_number"),
+            target=call.data.get("target"),
+            default_phone=default_phone,
+        )
+        message = call.data["message"]
 
-        try:
-            raw = await hass.async_add_executor_job(
-                run_router_commands,
-                router_type,
-                merged["router_ip"],
-                merged["router_password"],
-                username,
-                "8",
-                phone,
-                message,
-            )
-        except Exception as err:
-            raise HomeAssistantError(f"Failed to send SMS: {err}") from err
+        result = await async_send_custom_sms(
+            hass,
+            router_type=router_type,
+            router_ip=merged["router_ip"],
+            router_password=merged["router_password"],
+            username=router_username_for_entry(merged, router_type),
+            phone=phone,
+            message=message,
+        )
 
-        try:
-            # For MC-series, run_router_commands() shells out to mc.py, whose
-            # stdout includes a "Commands received: [...]" line before the
-            # JSON result -- not pure JSON on its own. extract_json() slices
-            # out just the {...} block, same as the sensor coordinator does.
-            parsed = json.loads(extract_json(raw))
-        except Exception as err:
-            raise HomeAssistantError(f"Unexpected response from router: {raw}") from err
-
-        result = parsed.get("8")
-        if result is None:
-            raise HomeAssistantError(f"No result returned for send SMS command: {parsed}")
-        if isinstance(result, dict) and result.get("error"):
-            raise HomeAssistantError(f"Failed to send SMS: {result['error']}")
-        if isinstance(result, int) and not (200 <= result < 300):
-            raise HomeAssistantError(f"Router returned HTTP status {result} while sending SMS")
-
+        hass.bus.async_fire(
+            EVENT_SMS_SENT,
+            {
+                "entry_id": entry.entry_id,
+                "phone_number": phone,
+                "message": message.strip(),
+                "result": result,
+            },
+        )
         _LOGGER.info("send_custom_sms: sent SMS via entry %s", entry.entry_id)
 
     def _resolve_g5_ultra_runner(call: ServiceCall) -> G5UltraRouterRunner:

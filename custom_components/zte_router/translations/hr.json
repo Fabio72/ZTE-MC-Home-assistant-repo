@@ -85,6 +85,32 @@
                     "description": "Opcionalni JSON rječnik koji se prosljeđuje kao parametri."
                 }
             }
+        },
+        "send_custom_sms": {
+            "name": "Pošalji prilagođeni SMS",
+            "description": "Pošalji SMS s proizvoljnim brojem i porukom putem konfiguriranog rutera.",
+            "fields": {
+                "entry_id": {
+                    "name": "ID unosa",
+                    "description": "ID konfiguracije kada je dodano više rutera."
+                },
+                "phone_number": {
+                    "name": "Broj telefona",
+                    "description": "Odredišni broj. Ako nije naveden, koristi se broj iz postavki."
+                },
+                "phone": {
+                    "name": "Telefon (alias)",
+                    "description": "Alias za phone_number."
+                },
+                "target": {
+                    "name": "Odredište",
+                    "description": "Odredišni broj ili popis brojeva (koristi se prvi)."
+                },
+                "message": {
+                    "name": "Poruka",
+                    "description": "Tekst SMS poruke za slanje."
+                }
+            }
         }
     }
 }
