@@ -465,15 +465,15 @@ class zteRouter:
             AD = self.get_AD() or getattr(self, "_zte_auth_AD", None)
             self._zte_auth_AD = AD
             header = {"Referer": self.referer}
-            # Encode phone number and message
-            phoneNumberEncoded = urllib.parse.quote(phone_number, safe="")
+            # Encode message only; do not pre-quote phone (quote + urlencode
+            # double-encodes + into literal %2B on MC888 firmware).
             messageEncoded = encodeMessage(message)
             logger.debug(f"Encoded SMS (GSM 7-bit): {messageEncoded}")
             payload = {
                 'isTest': 'false',
                 'goformId': 'SEND_SMS',
                 'notCallback': 'true',
-                'Number': phoneNumberEncoded,
+                'Number': phone_number,
                 'sms_time': get_sms_time(),
                 'MessageBody': messageEncoded,
                 'ID': '-1',
