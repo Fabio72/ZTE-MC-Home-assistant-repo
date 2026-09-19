@@ -377,8 +377,8 @@ UNITS = {
     "ppp_status": None,
     "sms_nv_total": None,
     "sms_sim_total": None,
-    "sms_nv_received_total": None,
-    "sms_nv_sent_total": None,
+    "sms_nv_rev_total": None,
+    "sms_nv_send_total": None,
     "sms_nv_draftbox_total": None,
     "sms_sim_received_total": None,
     "sms_sim_sent_total": None,
@@ -452,10 +452,10 @@ DISABLED_SENSORS_MC889 = {
     "sms_sim_total": True,
     "sms_class": True,
     "sms_dev_unread_num": True,
-    "sms_sim_rev_total": True,
-    "sms_sim_send_total": True,
+    "sms_sim_received_total": True,
+    "sms_sim_sent_total": True,
     "sms_sim_unread_num": True,
-    "sms_nv_received_total":True,
+    "sms_nv_rev_total":True,
     "sms_received_flag":True,
     "tag": True,
     "wifi_5g_enable": True,
@@ -471,28 +471,28 @@ DISABLED_SENSORS_MC889 = {
     "wifi_chip2_ssid2_access_sta_num": True,
     "wifi_dfs_status": True,
     "wifi_enable": True,
-    "wifi_on_off_state": True,
+    "wifi_onoff_state": True,
     "m_ssid_enable": True,
-    "ex_wifi_profile": True,
-    "ex_ssid1": True,
+    "EX_wifi_profile": True,
+    "EX_SSID1": True,
     "draft_group_id": True,
     #MC889
     "5g_cell_id": True,
     "5g_dl_earfcn": True,
     "cell_info_band": True,
     "data_volume_limit_size": True,
-    "ex_ssid1": True,
-    "ex_wifi_profile": True,
-    "nr_5g_cell_id": True,
-    "preferred_dns_manual": True,
+    "EX_SSID1": True,
+    "EX_wifi_profile": True,
+    "nr5g_cell_id": True,
+    "prefer_dns_manual": True,
     "ssid": True,
     "sta_ip_status": True,
     "standby_dns_manual": True,
-    "static_wan_ip_address": True,
+    "static_wan_ipaddr": True,
     "static_wan_status": True,
     "station_mac": True,
     "sts_received_flag": True,
-    "wifi_on_off_state": True,
+    "wifi_onoff_state": True,
 }
 
 DISABLED_SENSORS_MC888 = {
@@ -511,10 +511,10 @@ DISABLED_SENSORS_MC888 = {
     "sms_sim_total": True,
     "sms_class": True,
     "sms_dev_unread_num": True,
-    "sms_sim_rev_total": True,
-    "sms_sim_send_total": True,
+    "sms_sim_received_total": True,
+    "sms_sim_sent_total": True,
     "sms_sim_unread_num": True,
-    "sms_nv_received_total":True,
+    "sms_nv_rev_total":True,
     "sms_received_flag":True,
     "tag": True,
 }
@@ -535,10 +535,10 @@ DISABLED_SENSORS_MC801A = {
     "sms_sim_total": True,
     "sms_class": True,
     "sms_dev_unread_num": True,
-    "sms_sim_rev_total": True,
-    "sms_sim_send_total": True,
+    "sms_sim_received_total": True,
+    "sms_sim_sent_total": True,
     "sms_sim_unread_num": True,
-    "sms_nv_received_total":True,
+    "sms_nv_rev_total":True,
     "sms_received_flag":True,
     "tag": True,
 }
@@ -554,8 +554,8 @@ for realtime_key in [
     DISABLED_SENSORS_G5_ULTRA[realtime_key] = False
 for sms_key in [
     "sms_nv_total",
-    "sms_nv_received_total",
-    "sms_nv_sent_total",
+    "sms_nv_rev_total",
+    "sms_nv_send_total",
     "sms_nv_draftbox_total",
     "sms_sim_total",
     "sms_sim_received_total",
@@ -837,3 +837,113 @@ SENSOR_NAMES.update({
     "lte_band_computed": "LTE Band (Computed from EARFCN)",
     "nr_band_computed": "NR Band (Computed from ARFCN)",
 })
+
+# ---------------------------------------------------------------------------
+# FORK LOCALE -- cqc/homeassistant-tooling :: .ha_patch/zte-fork
+# ---------------------------------------------------------------------------
+# Potatura per router_type == MC888 (installazione 192.168.0.1: SMS gateway +
+# contatori mensili + reboot).  Motivo e numeri: docs/plan.md.
+#
+# >>> QUESTO E' L'UNICO PUNTO da modificare per riattivare/disattivare un
+# >>> gruppo di entita' su MC888. Nessun altro file contiene la lista.
+#
+# MC888_PRUNE_ENABLED = False -> comportamento upstream (263 entita' create).
+#
+# Le classi/piattaforme upstream restano tutte nel codice: la potatura agisce
+# solo sulla *costruzione* delle entita' e sulle liste di comandi, cosi' un
+# rebase su Kajkac/ZTE-MC-Home-assistant-repo resta un diff leggibile.
+MC888_PRUNE_ENABLED = True
+
+# Sensori del loop generico di sensor.py (mappa SENSOR_NAMES -> entity_id).
+# Ogni chiave qui produce UNA entita' `sensor.<slug(SENSOR_NAMES[chiave])>`.
+MC888_KEEP_GENERIC_KEYS = (
+    "network_type",        # -> sensor.network_type        (dashboard network)
+    "sms_capacity_left",   # -> sensor.sms_capacity_left   (automazioni SMS, cmd 3)
+)
+
+# Chiavi che NON producono un'entita' propria: alimentano le classi dedicate di
+# sensor.py leggendo coordinator.data. Devono restare richieste al router
+# (MC888_ZTEINFO3_GROUPS) altrimenti quei sensori restano vuoti.
+MC888_KEEP_DATA_KEYS = (
+    # ConnectedBandsSensor -> sensor.connected_bands
+    "rmcc",
+    "rmnc",
+    "cell_id",
+    "wan_ipaddr",
+    "lte_ca_pcell_band",
+    "lte_ca_pcell_bandwidth",
+    "lte_multi_ca_scell_info",
+    "lte_multi_ca_scell_sig_info",   # fallback di format_ca_bands()
+    "nr5g_action_band",
+    # MonthlyUsageSensor / monthly_tx_gb / monthly_rx_gb
+    "monthly_tx_bytes",
+    "monthly_rx_bytes",
+    # ZTEFluxSensor / ZTEFluxTotalUsageSensor / DataLeftSensor
+    "flux_monthly_tx_bytes",
+    "flux_monthly_rx_bytes",
+)
+
+# Sensori con classe dedicata in sensor.py da istanziare per MC888.
+MC888_KEEP_DEDICATED = (
+    "connected_bands",   # ConnectedBandsSensor
+    "monthly_usage",     # MonthlyUsageSensor
+    "monthly_tx_gb",
+    "monthly_rx_gb",
+    "data_left",         # DataLeftSensor (usa flux_monthly_*)
+    "last_sms",          # LastSMSSensor (coordinatore SMS, cmd 6)
+)
+
+# Chiavi di FLUX_KEYS che producono un'entita' ZTEFluxSensor.
+# "flux_total_usage" e' gestita a parte -> ZTEFluxTotalUsageSensor
+# (= sensor.flux_monthly_usage, valore tx+rx del mese).
+MC888_KEEP_FLUX_KEYS = (
+    "flux_monthly_tx_bytes",   # -> sensor.flux_monthly_tx
+    "flux_monthly_rx_bytes",   # -> sensor.flux_monthly_rx
+    "flux_total_usage",        # -> sensor.flux_monthly_usage
+)
+
+# Etichette di button_definitions (button.py) da creare per MC888.
+# Il resto (Send SMS 1/2, Connect/Disconnect Data, Set 4G/5G...) resta definito
+# in button.py ma non viene istanziato: non ha consumatori.
+MC888_KEEP_BUTTONS = (
+    "Send SMS 50GB",     # cmd 8, automazioni SMS (11 - rete.yaml)
+    "Delete All SMS",    # cmd 5, automazioni pulizia memoria SMS
+    "Reboot Router",     # cmd 4, watchdog + ZTE Reboot 07:00
+)
+
+# Comandi del ZTERouterDataUpdateCoordinator per ciclo di poll.
+#   3 = ztesmsinfo()  -> cmd=sms_capacity_info (sms_capacity_left)
+#   7 = zteinfo3()    -> multi_data con i gruppi di MC888_ZTEINFO3_GROUPS
+#   16 = zteinfo4()   -> station_list/lan_station_list, serviva solo a
+#                        wifi_clients/lan_clients/connected_devices/device_tracker
+#                        (tutte potate): 2 richieste HTTP/ciclo risparmiate.
+MC888_COORDINATOR_CMDS = ("3", "7")
+
+# Sottoinsieme MINIMO di parametri richiesti dal router in zteinfo3 (cmd 7),
+# raggruppati come upstream: mc.py filtra la propria tabella con questa mappa
+# (la tabella upstream resta intatta nel file, per il rebase).
+# Copertura richiesta: MC888_KEEP_DATA_KEYS + MC888_KEEP_GENERIC_KEYS, tranne
+# sms_capacity_left che arriva dal cmd 3. Verificata da
+# scripts/check_entities.py (test T4).
+MC888_ZTEINFO3_GROUPS = {
+    "radio_network": (
+        "network_type",
+        "rmcc",
+        "rmnc",
+        "cell_id",
+        "lte_ca_pcell_band",
+        "lte_ca_pcell_bandwidth",
+        "lte_multi_ca_scell_info",
+        "lte_multi_ca_scell_sig_info",
+        "nr5g_action_band",
+    ),
+    "connectivity": (
+        "wan_ipaddr",
+    ),
+    "misc": (
+        "monthly_tx_bytes",
+        "monthly_rx_bytes",
+        "flux_monthly_tx_bytes",
+        "flux_monthly_rx_bytes",
+    ),
+}

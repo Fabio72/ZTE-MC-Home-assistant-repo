@@ -8,6 +8,12 @@ from datetime import datetime, timedelta
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .router_backend import run_router_commands
+from .const import (
+    ROUTER_TYPE_MC888,
+    # FORK LOCALE -- potatura MC888 (vedi .ha_patch/zte-fork/docs/plan.md)
+    MC888_PRUNE_ENABLED,
+    MC888_COORDINATOR_CMDS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +42,17 @@ class ZTERouterDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         _LOGGER.debug("Starting _async_update_data in ZTERouterDataUpdateCoordinator at %s", datetime.now())
         new_data = {}
+        # Le etichette sono di upstream e non descrivono i metodi reali di mc.py:
+        #   3 = ztesmsinfo() -> cmd=sms_capacity_info (sms_capacity_left)
+        #   7 = zteinfo3()   -> i gruppi multi_data (il grosso del traffico)
+        #  16 = zteinfo4()   -> station_list + lan_station_list (2 richieste)
         keys = {3: "dynamic_data", 7: "status_data", 16: "client_data"}
+        # FORK LOCALE -- per MC888 il cmd 16 serve solo a wifi_clients /
+        # lan_clients / connected_devices / device_tracker, tutte potate: due
+        # richieste HTTP in meno per ogni ciclo di poll. Vedi MC888_COORDINATOR_CMDS.
+        if MC888_PRUNE_ENABLED and self.router_type == ROUTER_TYPE_MC888:
+            keep_cmds = {int(cmd) for cmd in MC888_COORDINATOR_CMDS}
+            keys = {cmd: label for cmd, label in keys.items() if cmd in keep_cmds}
         cmds = ','.join(map(str, keys.keys()))
 
         try:

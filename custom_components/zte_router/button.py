@@ -2,7 +2,17 @@ import logging
 import asyncio
 from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN, MANUFACTURER, MODEL, ROUTER_TYPE_G5_ULTRA, ROUTER_TYPE_MC801
+from .const import (
+    DOMAIN,
+    MANUFACTURER,
+    MODEL,
+    ROUTER_TYPE_G5_ULTRA,
+    ROUTER_TYPE_MC801,
+    ROUTER_TYPE_MC888,
+    # FORK LOCALE -- potatura MC888 (vedi .ha_patch/zte-fork/docs/plan.md)
+    MC888_PRUNE_ENABLED,
+    MC888_KEEP_BUTTONS,
+)
 from .log_util import describe_text, redact_phone
 from .router_backend import run_router_commands
 
@@ -49,6 +59,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     if router_type == ROUTER_TYPE_G5_ULTRA:
         unsupported = {"9", "10", "11", "12", "13", "14", "15"}
         button_definitions = [entry for entry in button_definitions if entry[1] not in unsupported]
+
+    # FORK LOCALE -- per MC888 restano solo i button con un consumatore reale
+    # (automazioni SMS + watchdog/reboot). Le altre definizioni restano qui
+    # sopra: per riabilitarne una basta aggiungerla a MC888_KEEP_BUTTONS.
+    if MC888_PRUNE_ENABLED and router_type == ROUTER_TYPE_MC888:
+        button_definitions = [
+            entry for entry in button_definitions if entry[0] in MC888_KEEP_BUTTONS
+        ]
 
     entities = [
         ZTERouterButton(

@@ -12,7 +12,15 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER, MODEL
+from .const import (
+    DOMAIN,
+    MANUFACTURER,
+    MODEL,
+    ROUTER_TYPE_MC801,
+    ROUTER_TYPE_MC888,
+    # FORK LOCALE -- potatura MC888 (vedi .ha_patch/zte-fork/docs/plan.md)
+    MC888_PRUNE_ENABLED,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +31,16 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up ZTE Router device trackers from a config entry."""
+    # FORK LOCALE -- per MC888 non si crea nessun device_tracker: la lista
+    # client (cmd 16 zteinfo4) non viene piu' richiesta al router e
+    # device_tracker.soffitta_zte non ha consumatori. La classe ZTEDeviceTracker
+    # resta definita in questo file; il codice e' identico a text.py, che per
+    # i non-G5 Ultra ritorna subito.
+    router_type = entry.data.get("router_type", ROUTER_TYPE_MC801)
+    if MC888_PRUNE_ENABLED and router_type == ROUTER_TYPE_MC888:
+        _LOGGER.debug("[MC888] device_tracker platform: nessuna entita' creata (potata)")
+        return
+
     coordinators = hass.data[DOMAIN][entry.entry_id]
     coordinator = coordinators["coordinator"]
 

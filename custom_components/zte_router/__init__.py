@@ -20,6 +20,8 @@ from .const import (
     ROUTER_TYPE_MC888,
     ROUTER_TYPE_MC889,
     ROUTER_TYPE_G5_ULTRA,
+    # FORK LOCALE -- potatura MC888 (vedi .ha_patch/zte-fork/docs/plan.md)
+    MC888_PRUNE_ENABLED,
 )
 from .g5_ultra_client import G5UltraRouterRunner
 from .router_backend import run_router_commands
@@ -164,7 +166,6 @@ SERVICE_ADD_APN_PROFILE_SCHEMA = vol.Schema(
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up ZTE Router from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    _ensure_services_registered(hass)
 
     # Merge entry.data with entry.options. entry.options will override any values in entry.data.
     config = {**entry.data, **entry.options}
@@ -175,6 +176,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     sms_check_interval = entry.options.get("sms_check_interval", 100)
     router_type = config.get("router_type", ROUTER_TYPE_MC801)
     username = config.get("router_username") if router_type in [ROUTER_TYPE_MC888, ROUTER_TYPE_MC889] else None
+
+    # FORK LOCALE -- la registrazione dei servizi dipende dal router_type
+    # (su MC888 si registra solo send_custom_sms). Nota: SERVICE_REG_KEY fa sì
+    # che la prima entry che si configura decida l'insieme dei servizi; in
+    # questa installazione la entry e' una sola.
+    _ensure_services_registered(hass, router_type)
 
     phone_number = config.get("phone_number", "13909")
     sms_message = config.get("sms_message", "BRZINA")
@@ -402,7 +409,7 @@ def _resolve_config_entry(hass: HomeAssistant, entry_id: str | None) -> ConfigEn
     return entry
 
 
-def _ensure_services_registered(hass: HomeAssistant) -> None:
+def _ensure_services_registered(hass: HomeAssistant, router_type: str | None = None) -> None:
     storage = hass.data.setdefault(DOMAIN, {})
     if storage.get(SERVICE_REG_KEY):
         return
@@ -666,100 +673,43 @@ def _ensure_services_registered(hass: HomeAssistant) -> None:
             raise HomeAssistantError(f"Failed to add APN profile: {err}") from err
         _raise_if_error(result, "add APN profile")
 
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_UBUS_CALL,
-        async_handle_ubus_call,
-        schema=SERVICE_UBUS_CALL_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SEND_CUSTOM_SMS,
-        async_handle_send_custom_sms,
-        schema=SERVICE_SEND_CUSTOM_SMS_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_NETWORK_MODE,
-        async_handle_set_network_mode,
-        schema=SERVICE_SET_NETWORK_MODE_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_LOCK_CELL,
-        async_handle_lock_cell,
-        schema=SERVICE_LOCK_CELL_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_BAND_LOCK,
-        async_handle_set_band_lock,
-        schema=SERVICE_SET_BAND_LOCK_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_RESET_BAND_CELL_LOCKS,
-        async_handle_reset_band_cell_locks,
-        schema=SERVICE_RESET_BAND_CELL_LOCKS_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SEND_USSD,
-        async_handle_send_ussd,
-        schema=SERVICE_SEND_USSD_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_FIREWALL,
-        async_handle_set_firewall,
-        schema=SERVICE_SET_FIREWALL_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_NAT,
-        async_handle_set_nat,
-        schema=SERVICE_SET_NAT_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_UPNP,
-        async_handle_set_upnp,
-        schema=SERVICE_SET_UPNP_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_DMZ,
-        async_handle_set_dmz,
-        schema=SERVICE_SET_DMZ_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_WAN_DNS,
-        async_handle_set_wan_dns,
-        schema=SERVICE_SET_WAN_DNS_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_WAN_MTU,
-        async_handle_set_wan_mtu,
-        schema=SERVICE_SET_WAN_MTU_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_DDNS,
-        async_handle_set_ddns,
-        schema=SERVICE_SET_DDNS_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_APN_MODE,
-        async_handle_set_apn_mode,
-        schema=SERVICE_SET_APN_MODE_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ADD_APN_PROFILE,
-        async_handle_add_apn_profile,
-        schema=SERVICE_ADD_APN_PROFILE_SCHEMA,
-    )
+    # FORK LOCALE -- registrazione servizi.
+    # Su MC888 tutti i servizi tranne send_custom_sms passano da
+    # _resolve_g5_ultra_runner() e solleverebbero SEMPRE
+    # "This service is only available for G5 Ultra router entries."
+    # (ubus_call, send_ussd, set_network_mode, lock_cell, set_band_lock,
+    #  reset_band_cell_locks, set_firewall, set_nat, set_upnp, set_dmz,
+    #  set_wan_dns, set_wan_mtu, set_ddns, set_apn_mode, add_apn_profile).
+    # Quindi non li si registra: handler e schemi restano definiti qui sopra,
+    # services.yaml non viene toccato, e per riaverli basta togliere la guardia.
+    mc888_sms_only = MC888_PRUNE_ENABLED and router_type == ROUTER_TYPE_MC888
+
+    registrations = [
+        (SERVICE_UBUS_CALL, async_handle_ubus_call, SERVICE_UBUS_CALL_SCHEMA),
+        (SERVICE_SEND_CUSTOM_SMS, async_handle_send_custom_sms, SERVICE_SEND_CUSTOM_SMS_SCHEMA),
+        (SERVICE_SET_NETWORK_MODE, async_handle_set_network_mode, SERVICE_SET_NETWORK_MODE_SCHEMA),
+        (SERVICE_LOCK_CELL, async_handle_lock_cell, SERVICE_LOCK_CELL_SCHEMA),
+        (SERVICE_SET_BAND_LOCK, async_handle_set_band_lock, SERVICE_SET_BAND_LOCK_SCHEMA),
+        (SERVICE_RESET_BAND_CELL_LOCKS, async_handle_reset_band_cell_locks, SERVICE_RESET_BAND_CELL_LOCKS_SCHEMA),
+        (SERVICE_SEND_USSD, async_handle_send_ussd, SERVICE_SEND_USSD_SCHEMA),
+        (SERVICE_SET_FIREWALL, async_handle_set_firewall, SERVICE_SET_FIREWALL_SCHEMA),
+        (SERVICE_SET_NAT, async_handle_set_nat, SERVICE_SET_NAT_SCHEMA),
+        (SERVICE_SET_UPNP, async_handle_set_upnp, SERVICE_SET_UPNP_SCHEMA),
+        (SERVICE_SET_DMZ, async_handle_set_dmz, SERVICE_SET_DMZ_SCHEMA),
+        (SERVICE_SET_WAN_DNS, async_handle_set_wan_dns, SERVICE_SET_WAN_DNS_SCHEMA),
+        (SERVICE_SET_WAN_MTU, async_handle_set_wan_mtu, SERVICE_SET_WAN_MTU_SCHEMA),
+        (SERVICE_SET_DDNS, async_handle_set_ddns, SERVICE_SET_DDNS_SCHEMA),
+        (SERVICE_SET_APN_MODE, async_handle_set_apn_mode, SERVICE_SET_APN_MODE_SCHEMA),
+        (SERVICE_ADD_APN_PROFILE, async_handle_add_apn_profile, SERVICE_ADD_APN_PROFILE_SCHEMA),
+    ]
+
+    for service_name, handler, schema in registrations:
+        if mc888_sms_only and service_name != SERVICE_SEND_CUSTOM_SMS:
+            _LOGGER.debug(
+                "[MC888] servizio '%s' non registrato (G5-only o senza consumatori)",
+                service_name,
+            )
+            continue
+        hass.services.async_register(DOMAIN, service_name, handler, schema=schema)
+
     storage[SERVICE_REG_KEY] = True

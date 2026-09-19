@@ -97,7 +97,24 @@ try:
 except Exception:
     pass
 
-s = urllib3.PoolManager(cert_reqs='CERT_NONE', ssl_context=ssl_context)
+# FORK LOCALE (cqc/homeassistant-tooling :: .ha_patch/zte-fork) ---------------
+# Con il default di urllib3 (maxsize=1) ogni connessione non riusata subito
+# produce "Connection pool is full, discarding connection: 192.168.0.1" nei
+# log. Le richieste di questo modulo sono sequenziali: alzare il limite non
+# cambia la concorrenza, elimina solo il rumore.
+FORK_HTTP_POOL_MAXSIZE = 4
+
+# Se il probe di protocollo fallisce su https E http, il router e' spento o in
+# reboot (es. il reboot delle 07:00 di button.reboot_router): invece di fare
+# 11+ richieste destinate a fallire, si salta il ciclo con un solo errore.
+# Portare a False per tornare al comportamento upstream.
+FORK_FAIL_FAST_WHEN_PROBE_FAILS = True
+
+s = urllib3.PoolManager(
+    cert_reqs='CERT_NONE',
+    ssl_context=ssl_context,
+    maxsize=FORK_HTTP_POOL_MAXSIZE,
+)
 
 def get_sms_time():
     logger.debug("Generating SMS time")
@@ -129,7 +146,7 @@ class zteRouter:
         self._zte_auth_LD = LD
         logger.debug("Authentication credentials stored in object instance")
 
-    def __init__(self, ip, username, password):
+    def __init__(self, ip, username, password, param_overrides=None):
         self.ip = ip
         self.protocol = "http"
         self.username = username
@@ -137,6 +154,11 @@ class zteRouter:
         self.cookies = {}
         self.stok = None
         self.uses_stok = False
+        # FORK LOCALE -- profilo minimo dei parametri di zteinfo3 per MC888
+        # (None = tabella upstream completa). Vedi run_commands()/zteinfo3().
+        self.param_overrides = param_overrides
+        # FORK LOCALE -- stato del probe di protocollo, vedi try_set_protocol().
+        self._protocol_probe_failed = False
         logger.debug(f"Initializing ZTE Router with IP {ip}, Username: {username}")
 
         self.try_set_protocol()
@@ -263,6 +285,7 @@ class zteRouter:
                 response = s.request('GET', url, timeout=2, retries=2)  # reduced timeout and retries
                 if response.status in [200, 302, 301]:
                     self.protocol = protocol
+                    self._protocol_probe_failed = False
                     logger.debug(f"Protocol set to {protocol}")
                     if protocol == "https":
                         self.get_certificate_info(self.ip)
@@ -270,9 +293,37 @@ class zteRouter:
             except Exception as e:
                 logger.debug(f"Failed to connect using {protocol}: {e}, trying next protocol.")
 
-        # Instead of raising, handle router unavailability gracefully:
-        logger.warning("Router is unavailable, protocol not set.")
-        self.protocol = None
+        # FORK LOCALE -- FIX "Not supported URL scheme none".
+        #
+        # Qui upstream faceva `self.protocol = None`. Subito dopo __init__
+        # costruisce `self.referer = f"{self.protocol}://{self.ip}/"`, che
+        # diventa la stringa "None://192.168.0.1/": urllib3 normalizza lo
+        # schema a "none" e OGNI richiesta successiva muore con
+        # `Not supported URL scheme none` -- il 2026-09 osservato 79 volte in
+        # produzione, a raffica alle 07:00 quando l'automazione
+        # "ZTE Reboot 192.168.0.1" riavvia il router.
+        #
+        # Inoltre il warning che lo spiegherebbe ("Router is unavailable,
+        # protocol not set.") non si vede, perche' configuration.yaml usa
+        # `logger: default: error`.
+        #
+        # Qui NON si azzera piu' il protocollo: resta l'ultimo valore valido
+        # (per questa istanza il default "http" di __init__, dato che il fork
+        # crea un'istanza nuova per ogni batch di comandi). Si segnala il
+        # fallimento con un flag, cosi' run_commands() puo' saltare i comandi
+        # dipendenti con UN solo errore chiaro invece di generarne N.
+        self._protocol_probe_failed = True
+        logger.error(
+            "Router %s non raggiungibile: probe https:// e http:// su /index.html "
+            "falliti entrambi (timeout 2s, 2 retry). Mantengo protocol=%r "
+            "(ultimo valore valido) invece di impostarlo a None: con None il "
+            "referer diventa 'None://%s/' e urllib3 risponde 'Not supported URL "
+            "scheme none' a ogni richiesta, nascondendo la vera causa "
+            "(router spento / in reboot).",
+            self.ip,
+            self.protocol,
+            self.ip,
+        )
 
 
     def hash(self, str):
@@ -632,6 +683,47 @@ class zteRouter:
                     "network_information,Lte_ca_status"
                 )
             }
+
+            # FORK LOCALE -- profilo minimo dei parametri (MC888).
+            #
+            # La tabella qui sopra resta quella di upstream: NON si riscrive,
+            # cosi' un rebase non confligge. Se router_backend ha passato un
+            # profilo (const.MC888_ZTEINFO3_GROUPS), si tiene per ogni gruppo
+            # solo l'intersezione con i parametri elencati nel profilo,
+            # mantenendo l'ordine e il raggruppamento upstream.
+            # Effetto: 199 parametri / 11 richieste HTTP -> 14 parametri / 3,
+            # e un warning se il profilo cita un parametro che upstream non
+            # chiede piu' (drift da sanare al rebase).
+            if self.param_overrides:
+                filtered_groups = {}
+                for group_name, wanted in self.param_overrides.items():
+                    template = param_groups.get(group_name)
+                    if not template:
+                        logger.warning(
+                            "[ZTE] profilo parametri: gruppo '%s' assente nella "
+                            "tabella upstream, ignorato", group_name,
+                        )
+                        continue
+                    wanted_set = {p.strip() for p in wanted if p and p.strip()}
+                    kept = [
+                        p.strip()
+                        for p in template.split(",")
+                        if p.strip() and p.strip() in wanted_set
+                    ]
+                    missing = wanted_set - set(kept)
+                    if missing:
+                        logger.warning(
+                            "[ZTE] profilo parametri: %s non richiesti dalla "
+                            "tabella upstream (%s), resteranno vuoti",
+                            sorted(missing), group_name,
+                        )
+                    filtered_groups[group_name] = ",".join(kept)
+                logger.debug(
+                    "[ZTE] profilo parametri applicato: %s parametri in %s gruppi",
+                    sum(len(v.split(",")) for v in filtered_groups.values()),
+                    len(filtered_groups),
+                )
+                param_groups = filtered_groups
 
             # Step 4: Prepare for chunked requests
             combined_data = {}
@@ -1174,7 +1266,8 @@ getsmstimeEncoded = urllib.parse.quote(getsmstime, safe="")
 #messageEncoded = gsm_encode(message)
 #outputmessage = messageEncoded.decode()
 
-def run_commands(ip, password, username=None, commands="", phone_number=None, message=None):
+def run_commands(ip, password, username=None, commands="", phone_number=None, message=None,
+                 param_overrides=None):
     """Authenticate against an MC-series router and execute one or more
     numeric command IDs in-process, returning a JSON string of
     {"<cmd_id>": <result>, ...}.
@@ -1182,9 +1275,27 @@ def run_commands(ip, password, username=None, commands="", phone_number=None, me
     This is the single source of truth for the command-ID dispatch table --
     it used to be duplicated directly in the __main__ block below, back when
     this module only ever ran as a subprocess spawned once per command.
+
+    FORK LOCALE: `param_overrides` e' il profilo minimo dei parametri di
+    zteinfo3 (const.MC888_ZTEINFO3_GROUPS, passato da router_backend per
+    router_type MC888). None = tabella upstream completa.
     """
     command_list = [cmd.strip() for cmd in str(commands).split(",") if cmd.strip()]
-    zte = zteRouter(ip, username, password)
+    zte = zteRouter(ip, username, password, param_overrides=param_overrides)
+
+    # FORK LOCALE -- se il probe di protocollo e' fallito il router e' spento o
+    # in reboot: si saltano TUTTI i comandi di questa batch con un solo errore
+    # leggibile, invece di generare N richieste destinate a fallire (ed era il
+    # caso dei 79 "Not supported URL scheme none" a ogni reboot delle 07:00).
+    # Le entita' restano sull'ultimo stato grazie ad allow_stale_data.
+    if FORK_FAIL_FAST_WHEN_PROBE_FAILS and zte._protocol_probe_failed:
+        message_out = (
+            f"Router {ip} non raggiungibile: probe https/http fallito "
+            f"(spento o in reboot?). Comandi {command_list} saltati in questo "
+            f"ciclo, si riprova al prossimo poll."
+        )
+        logger.error(message_out)
+        return json.dumps({str(command): message_out for command in command_list})
 
     # Single authentication before executing the commands
     zte.authenticate()
@@ -1254,11 +1365,19 @@ def run_commands(ip, password, username=None, commands="", phone_number=None, me
                     results[cmd_id] = "SMS sending not supported in multi-command mode."
                 else:
                     if phone_number and message:
+                        # FORK LOCALE -- privacy (D8): mai numero né testo nei log.
+                        # Dopo il rebase la redazione usa log_util di upstream
+                        # (PR #81): ultime 2 cifre del numero + lunghezza del testo.
                         logger.info(f"Sending SMS to {redact_phone(phone_number)} with message: {describe_text(message)}")
                         result = zte.sendsms(phone_number, message)
                         results[cmd_id] = result
                     else:
-                        logger.error(f"Phone number or message not provided. Phone: {phone_number}, Message: {message}")
+                        # FORK LOCALE -- privacy (D8): solo presenza/assenza, non i valori.
+                        logger.error(
+                            "Phone number or message not provided (phone set: %s, message set: %s)",
+                            bool(phone_number),
+                            bool(message),
+                        )
                         results[cmd_id] = "Phone number or message not provided for sending SMS"
             elif cmd_id == 9:
                 results[cmd_id] = zte.connect_data()

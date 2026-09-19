@@ -10,6 +10,8 @@ from .const import (
     ROUTER_TYPE_MC801,
     ROUTER_TYPE_MC888,
     ROUTER_TYPE_MC889,
+    # FORK LOCALE -- potatura MC888 (vedi .ha_patch/zte-fork/docs/plan.md)
+    MC888_PRUNE_ENABLED,
 )
 from .g5_ultra_client import G5UltraRouterRunner
 from .router_backend import run_router_commands
@@ -44,6 +46,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             G5UltraCellLockSwitch(main_coordinator, ip_entry, password_entry, config_entry.entry_id, "4g"),
             G5UltraCellLockSwitch(main_coordinator, ip_entry, password_entry, config_entry.entry_id, "5g"),
         ], False)
+    elif MC888_PRUNE_ENABLED and router_type == ROUTER_TYPE_MC888:
+        # FORK LOCALE -- WiFiSwitch (switch.soffitta_zte_router_wifi) non ha
+        # consumatori nella config viva: la classe resta definita qui sotto e
+        # ricompare togliendo questa guardia.
+        _LOGGER.debug("[MC888] switch platform: nessuna entita' creata (potata)")
     else:
         async_add_entities([
             WiFiSwitch(main_coordinator, ip_entry, password_entry, username_entry, router_type)

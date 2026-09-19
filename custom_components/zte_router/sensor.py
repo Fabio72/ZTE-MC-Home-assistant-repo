@@ -20,6 +20,12 @@ from .const import (
     ROUTER_TYPE_MC888,
     ROUTER_TYPE_MC889,
     ROUTER_TYPE_G5_ULTRA,
+    # FORK LOCALE -- potatura MC888 (vedi .ha_patch/zte-fork/docs/plan.md).
+    # Le liste vivono SOLO in const.py: qui non c'e' nessuna entita' hardcoded.
+    MC888_PRUNE_ENABLED,
+    MC888_KEEP_GENERIC_KEYS,
+    MC888_KEEP_DEDICATED,
+    MC888_KEEP_FLUX_KEYS,
 )
 from .sensor_base import ZTERouterEntity, guard_stale_data
 from .sensor_bands import ConnectedBandsSensor
@@ -71,18 +77,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     sensors = []
     handled_keys = set()
 
-    # Core Sensors
-    sensors.extend([
-        ConnectedBandsSensor(coordinator, disabled_sensors.get("connected_bands", False)),
-        WiFiClientsSensor(coordinator),
-        LANClientsSensor(coordinator),
-        ConnectedDevicesSensor(coordinator),
-        MonthlyUsageSensor(coordinator),
-        monthly_tx_gb(coordinator),
-        monthly_rx_gb(coordinator),
-        DataLeftSensor(coordinator),
-        ConnectionUptimeSensor(coordinator),
-    ])
+    # FORK LOCALE -- potatura MC888: per questo router_type nascono solo le
+    # entita' elencate in const.MC888_KEEP_*. Non si cancellano classi ne'
+    # piattaforme: si decide solo cosa istanziare (rebase-friendly).
+    prune_mc888 = MC888_PRUNE_ENABLED and router_type == ROUTER_TYPE_MC888
+
+    # Core Sensors. Le entita' potate non vengono nemmeno istanziate (una
+    # entita' costruita ma scartata continuerebbe a loggare "Initializing ...").
+    core_sensors = [
+        ("connected_bands", lambda: ConnectedBandsSensor(coordinator, disabled_sensors.get("connected_bands", False))),
+        ("wifi_clients", lambda: WiFiClientsSensor(coordinator)),
+        ("lan_clients", lambda: LANClientsSensor(coordinator)),
+        ("connected_devices", lambda: ConnectedDevicesSensor(coordinator)),
+        ("monthly_usage", lambda: MonthlyUsageSensor(coordinator)),
+        ("monthly_tx_gb", lambda: monthly_tx_gb(coordinator)),
+        ("monthly_rx_gb", lambda: monthly_rx_gb(coordinator)),
+        ("data_left", lambda: DataLeftSensor(coordinator)),
+        ("connection_uptime", lambda: ConnectionUptimeSensor(coordinator)),
+    ]
+    for dedicated_key, dedicated_factory in core_sensors:
+        if prune_mc888 and dedicated_key not in MC888_KEEP_DEDICATED:
+            _LOGGER.debug("[MC888] sensore dedicato potato: %s", dedicated_key)
+            continue
+        sensors.append(dedicated_factory())
+
     handled_keys.update(["station_list", "lan_station_list", "all_devices"])
     if router_type == ROUTER_TYPE_G5_ULTRA:
         # These keys already back a dedicated switch entity (switch.py); skip
@@ -100,14 +118,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     await sms_coordinator.async_config_entry_first_refresh()
     hass.data[DOMAIN][entry.entry_id]["sms_coordinator"] = sms_coordinator
 
-    # SMS Sensor
-    sms_data = sms_coordinator.data.get("sms_data", {}) or {}
-    sensors.append(LastSMSSensor(sms_coordinator, sms_data, disabled_sensors.get("last_sms", False)))
+    # SMS Sensor (in MC888_KEEP_DEDICATED: alimenta le automazioni SMS)
+    if not prune_mc888 or "last_sms" in MC888_KEEP_DEDICATED:
+        sms_data = sms_coordinator.data.get("sms_data", {}) or {}
+        sensors.append(LastSMSSensor(sms_coordinator, sms_data, disabled_sensors.get("last_sms", False)))
 
     # FLUX Sensors (bleibt wie bisher)
     registry = async_get(hass)
+    flux_keys = MC888_KEEP_FLUX_KEYS if prune_mc888 else FLUX_KEYS
     if enable_flux:
-        for key in FLUX_KEYS:
+        for key in flux_keys:
             if key not in handled_keys:
                 if key in {"flux_total_usage", "flux_monthly_usage"}:
                     if "flux_total_usage" not in handled_keys:
@@ -119,7 +139,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     else:
         # Clean up previously created FLUX sensors if they're now disabled
         entity_ids = list(registry.entities.keys())
-        for key in FLUX_KEYS:
+        for key in flux_keys:
             unique_id = f"{DOMAIN}_{entry.data['router_ip']}_stat_{key}"
             for eid in entity_ids:
                 entity = registry.entities.get(eid)
@@ -139,6 +159,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             key in diagnostic_keys_to_skip or
             isinstance(value, dict)
         ):
+            continue
+
+        # FORK LOCALE -- per MC888 il loop generico crea solo le entita' in
+        # MC888_KEEP_GENERIC_KEYS. Le altre chiavi restano in coordinator.data
+        # (servono ai sensori dedicati) ma non generano piu' un'entita'.
+        if prune_mc888 and key not in MC888_KEEP_GENERIC_KEYS:
             continue
 
         name = SENSOR_NAMES.get(key, key)
